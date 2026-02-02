@@ -1,4 +1,4 @@
-name: Alpine Linux Build
+name: Alpine Linux Build (Multi-Arch)
 
 on:
   push:
@@ -10,62 +10,53 @@ on:
 jobs:
   build-alpine:
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            arch_name: x64
+          - platform: linux/arm64
+            arch_name: arm64
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
+
+    # Required for building ARM images on x64 runners
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-    
+
     - name: Build BeamMP-Server in Alpine
       run: |
         # Create a Dockerfile for the build
         cat > Dockerfile.alpine-build << 'EOF'
         FROM alpine:latest
         
-        # Install ALL build dependencies including those needed for vcpkg bootstrap
+        # Install ALL build dependencies
         RUN apk add --no-cache \
-            git \
-            cmake \
-            make \
-            g++ \
-            gcc \
-            musl-dev \
-            curl \
-            wget \
-            zip \
-            unzip \
-            tar \
-            lua5.3-dev \
-            bash \
-            pkgconf \
-            samurai \
-            linux-headers \
-            perl \
-            python3 \
-            autoconf \
-            automake \
-            libtool \
-            file
+            git cmake make g++ gcc musl-dev curl wget zip unzip tar \
+            lua5.3-dev bash pkgconf samurai linux-headers perl python3 \
+            autoconf automake libtool file
         
         WORKDIR /build
         
         # Copy source
         COPY . .
         
-        # Set environment variables for vcpkg (MUST be set before bootstrap)
+        # Set environment variables for vcpkg
         ENV VCPKG_FORCE_SYSTEM_BINARIES=1
         
-        # Update vcpkg submodule with full history (not shallow)
+        # Update vcpkg submodule
         RUN git submodule update --init --recursive && \
             cd vcpkg && \
             git fetch --unshallow || true && \
             ./bootstrap-vcpkg.sh -disableMetrics
         
-        # Configure with CMake using Ninja generator
-        # Note: Adding -Wno-error=template-body to work around sol2/C++20 compatibility issue
-        # Static linking for musl compatibility
+        # Configure with CMake
         RUN cmake -S . -B bin \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -76,27 +67,34 @@ jobs:
         
         # Build
         RUN cmake --build bin --config Release -t BeamMP-Server
-        
         EOF
         
-        # Build using Docker
-        docker build -f Dockerfile.alpine-build -t beammp-builder .
+        # Build using Docker Buildx with specific platform
+        # --load brings the image back to the local Docker daemon for extraction
+        docker buildx build \
+          --platform ${{ matrix.platform }} \
+          -f Dockerfile.alpine-build \
+          -t beammp-builder \
+          --load .
         
         # Extract the binary
         docker create --name beammp-extract beammp-builder
         docker cp beammp-extract:/build/bin/BeamMP-Server ./BeamMP-Server
         docker rm beammp-extract
-    
-    - name: Verify binary
+
+    - name: Rename and Verify Binary
       run: |
-        ls -lh BeamMP-Server
-        file BeamMP-Server
-    
+        # Rename binary to include architecture
+        mv BeamMP-Server BeamMP-Server-alpine-${{ matrix.arch_name }}
+        
+        ls -lh BeamMP-Server-alpine-${{ matrix.arch_name }}
+        file BeamMP-Server-alpine-${{ matrix.arch_name }}
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BeamMP-Server-Alpine
-        path: BeamMP-Server
+        name: BeamMP-Server-alpine-${{ matrix.arch_name }}
+        path: BeamMP-Server-alpine-${{ matrix.arch_name }}
         retention-days: 30
 
   # Optional: Create a release
@@ -106,15 +104,17 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     
     steps:
-    - name: Download artifact
+    - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
-        name: BeamMP-Server-Alpine
+        # Matches both artifacts (x64 and arm64)
+        pattern: BeamMP-Server-alpine-*
+        merge-multiple: true
     
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: BeamMP-Server
+        files: BeamMP-Server-alpine-*
         draft: false
         prerelease: false
       env:
