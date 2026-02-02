@@ -24,13 +24,16 @@ jobs:
         cat > Dockerfile.alpine-build << 'EOF'
         FROM alpine:latest
         
-        # Install build dependencies
+        # Install ALL build dependencies including those needed for vcpkg bootstrap
         RUN apk add --no-cache \
             git \
             cmake \
             make \
             g++ \
+            gcc \
+            musl-dev \
             curl \
+            wget \
             zip \
             unzip \
             tar \
@@ -38,21 +41,31 @@ jobs:
             bash \
             pkgconf \
             ninja \
-            linux-headers
+            linux-headers \
+            perl \
+            python3 \
+            autoconf \
+            automake \
+            libtool \
+            file
         
         WORKDIR /build
         
         # Copy source
         COPY . .
         
-        # Clone vcpkg with full history (not shallow)
+        # Clone vcpkg with full history and bootstrap
         RUN rm -rf vcpkg && \
             git clone https://github.com/microsoft/vcpkg.git vcpkg && \
             cd vcpkg && \
-            git checkout 6353ece09f6cebc34413ea04e69beab3fece73c2
+            git checkout 6353ece09f6cebc34413ea04e69beab3fece73c2 && \
+            ./bootstrap-vcpkg.sh -disableMetrics
         
-        # Configure with CMake
-        RUN cmake -S . -B bin -DCMAKE_BUILD_TYPE=Release
+        # Configure with CMake (explicitly set the toolchain)
+        RUN cmake -S . -B bin \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=/build/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DCMAKE_MAKE_PROGRAM=/usr/bin/make
         
         # Build
         RUN cmake --build bin --config Release -t BeamMP-Server
