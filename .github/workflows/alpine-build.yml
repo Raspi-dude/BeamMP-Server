@@ -40,6 +40,7 @@ jobs:
             lua5.3-dev \
             bash \
             pkgconf \
+            samurai \
             linux-headers \
             perl \
             python3 \
@@ -53,14 +54,14 @@ jobs:
         # Copy source
         COPY . .
         
+        # Set environment variables for vcpkg (MUST be set before bootstrap)
+        ENV VCPKG_FORCE_SYSTEM_BINARIES=1
+        
         # Update vcpkg submodule with full history (not shallow)
         RUN git submodule update --init --recursive && \
             cd vcpkg && \
             git fetch --unshallow || true && \
             ./bootstrap-vcpkg.sh -disableMetrics
-        
-        # Set environment variables for vcpkg
-        ENV VCPKG_FORCE_SYSTEM_BINARIES=1
         
         # Configure with CMake using Ninja generator
         RUN cmake -S . -B bin \
