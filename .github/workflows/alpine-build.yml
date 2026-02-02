@@ -14,26 +14,69 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        submodules: recursive
     
-    - name: Build in Alpine Docker container
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build BeamMP-Server in Alpine
       run: |
-        docker run --rm \
-          -v ${{ github.workspace }}:/workspace \
-          -w /workspace \
-          alpine:latest \
-          /bin/sh -c "
-            apk add --no-cache git cmake make g++ curl zip unzip tar lua5.3-dev bash pkgconf ninja &&
-            cmake -S . -B bin -DCMAKE_BUILD_TYPE=Release &&
-            cmake --build bin --config Release -t BeamMP-Server
-          "
+        # Create a Dockerfile for the build
+        cat > Dockerfile.alpine-build << 'EOF'
+        FROM alpine:latest
+        
+        # Install build dependencies
+        RUN apk add --no-cache \
+            git \
+            cmake \
+            make \
+            g++ \
+            curl \
+            zip \
+            unzip \
+            tar \
+            lua5.3-dev \
+            bash \
+            pkgconf \
+            ninja \
+            linux-headers
+        
+        WORKDIR /build
+        
+        # Copy source
+        COPY . .
+        
+        # Clone vcpkg with full history (not shallow)
+        RUN rm -rf vcpkg && \
+            git clone https://github.com/microsoft/vcpkg.git vcpkg && \
+            cd vcpkg && \
+            git checkout 6353ece09f6cebc34413ea04e69beab3fece73c2
+        
+        # Configure with CMake
+        RUN cmake -S . -B bin -DCMAKE_BUILD_TYPE=Release
+        
+        # Build
+        RUN cmake --build bin --config Release -t BeamMP-Server
+        
+        EOF
+        
+        # Build using Docker
+        docker build -f Dockerfile.alpine-build -t beammp-builder .
+        
+        # Extract the binary
+        docker create --name beammp-extract beammp-builder
+        docker cp beammp-extract:/build/bin/BeamMP-Server ./BeamMP-Server
+        docker rm beammp-extract
+    
+    - name: Verify binary
+      run: |
+        ls -lh BeamMP-Server
+        file BeamMP-Server
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: BeamMP-Server-Alpine
-        path: bin/BeamMP-Server
+        path: BeamMP-Server
         retention-days: 30
 
   # Optional: Create a release
