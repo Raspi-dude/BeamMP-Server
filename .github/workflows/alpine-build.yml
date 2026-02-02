@@ -54,17 +54,17 @@ jobs:
         # Copy source
         COPY . .
         
-        # Clone vcpkg with full history and bootstrap
-        RUN rm -rf vcpkg && \
-            git clone https://github.com/microsoft/vcpkg.git vcpkg && \
+        # Update vcpkg submodule with full history (not shallow)
+        RUN git submodule update --init --recursive && \
             cd vcpkg && \
-            git checkout 6353ece09f6cebc34413ea04e69beab3fece73c2 && \
+            git fetch --unshallow || true && \
             ./bootstrap-vcpkg.sh -disableMetrics
         
-        # Configure with CMake (explicitly set the toolchain)
+        # Configure with CMake (explicitly set compilers)
         RUN cmake -S . -B bin \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE=/build/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DCMAKE_C_COMPILER=/usr/bin/gcc \
+            -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
             -DCMAKE_MAKE_PROGRAM=/usr/bin/make
         
         # Build
