@@ -40,7 +40,6 @@ jobs:
             lua5.3-dev \
             bash \
             pkgconf \
-            ninja \
             linux-headers \
             perl \
             python3 \
@@ -60,12 +59,15 @@ jobs:
             git fetch --unshallow || true && \
             ./bootstrap-vcpkg.sh -disableMetrics
         
-        # Configure with CMake (explicitly set compilers)
+        # Set environment variables for vcpkg
+        ENV VCPKG_FORCE_SYSTEM_BINARIES=1
+        
+        # Configure with CMake using Ninja generator
         RUN cmake -S . -B bin \
+            -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=/usr/bin/gcc \
-            -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
-            -DCMAKE_MAKE_PROGRAM=/usr/bin/make
+            -DCMAKE_CXX_COMPILER=/usr/bin/g++
         
         # Build
         RUN cmake --build bin --config Release -t BeamMP-Server
