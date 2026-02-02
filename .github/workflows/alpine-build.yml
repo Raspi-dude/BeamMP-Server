@@ -64,11 +64,13 @@ jobs:
             ./bootstrap-vcpkg.sh -disableMetrics
         
         # Configure with CMake using Ninja generator
+        # Note: Adding -Wno-error=template-body to work around sol2/C++20 compatibility issue
         RUN cmake -S . -B bin \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=/usr/bin/gcc \
-            -DCMAKE_CXX_COMPILER=/usr/bin/g++
+            -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
+            -DCMAKE_CXX_FLAGS="-Wno-error=template-body"
         
         # Build
         RUN cmake --build bin --config Release -t BeamMP-Server
