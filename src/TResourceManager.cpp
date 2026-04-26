@@ -134,7 +134,7 @@ void TResourceManager::RefreshFiles() {
             size_t Read = 0;
             std::vector<char> Data;
             while (Read < FileSize) {
-                Data.resize(size_t(std::min<size_t>(FileSize - Read, 4096)));
+                Data.resize(size_t(std::min<size_t>(FileSize - Read, 1048576)));
                 size_t RealDataSize = Data.size();
                 stream.read(Data.data(), std::streamsize(Data.size()));
                 if (stream.eof() || stream.fail()) {
